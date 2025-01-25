@@ -2,7 +2,8 @@
   <div id="app">
     <h1>PostgreSQL API Tester</h1>
 
-    <div class="test-case">
+    <!-- Show connection form if the user is not connected -->
+    <div v-if="!isConnected" class="test-case">
       <h3>Create a New Connection</h3>
       <p>Provide your database connection details below and click "Create Connection."</p>
       <form @submit.prevent="createConnection">
@@ -27,15 +28,25 @@
       <p class="output">{{ connectionMessage }}</p>
     </div>
 
-    <div class="test-case">
-      <h3>Execute SQL Query</h3>
-      <p>Enter a SQL query below and click "Execute Query."</p>
-      <form @submit.prevent="executeQuery">
-        <textarea v-model="query" placeholder="SELECT * FROM users"></textarea>
-        <button type="submit">Execute Query</button>
-      </form>
+    <!-- Show entity selection if connected but no entity is selected -->
+    <div v-else-if="!selectedEntity" class="test-case">
+      <h3>Select an Entity</h3>
+      <p>Choose an entity to view related questions:</p>
+      <div class="cards">
+        <div class="card" @click="selectEntity('article')">Articles</div>
+        <div class="card" @click="selectEntity('section')">Sections</div>
+        <div class="card" @click="selectEntity('stock')">Stocks</div>
+      </div>
+      <button class="change-connection" @click="resetConnection">Change Connection</button>
+    </div>
+
+    <!-- Show questions if an entity is selected -->
+    <div v-else class="test-case">
+      <h3>Questions for {{ selectedEntity }}</h3>
+      <button @click="goBack">Go Back</button>
+      <button class="change-connection" @click="resetConnection">Change Connection</button>
       <div class="output">
-        <pre>{{ queryResult }}</pre>
+        <pre>{{ questions }}</pre>
       </div>
     </div>
   </div>
@@ -52,8 +63,9 @@ export default {
         database: "",
       },
       connectionMessage: "",
-      query: "",
-      queryResult: "",
+      isConnected: false,
+      selectedEntity: null,
+      questions: [],
     };
   },
   methods: {
@@ -71,6 +83,7 @@ export default {
         .then((data) => {
           if (data.success) {
             this.connectionMessage = "Connection created successfully!";
+            this.isConnected = true;
           } else {
             this.connectionMessage = `Error: ${data.error}`;
           }
@@ -79,29 +92,50 @@ export default {
           this.connectionMessage = `Error: ${error.message}`;
         });
     },
-    executeQuery() {
+    selectEntity(entity) {
+      this.selectedEntity = entity;
+      this.fetchQuestions(entity);
+    },
+    fetchQuestions(entity) {
       fetch("http://localhost:8000/server.php", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include", // Include credentials for session handling
         body: JSON.stringify({
           action: "query",
-          query: this.query,
+          query: `SELECT * FROM questions WHERE target_entity = '${entity}'`,
         }),
       })
         .then((response) => response.json())
         .then((data) => {
           if (data.error) {
-            this.queryResult = `Error: ${data.error}`;
+            this.questions = `Error: ${data.error}`;
           } else {
-            this.queryResult = JSON.stringify(data, null, 2);
+            this.questions = data.length
+              ? JSON.stringify(data, null, 2)
+              : "No questions found.";
           }
         })
         .catch((error) => {
-          this.queryResult = `Error: ${error.message}`;
+          this.questions = `Error: ${error.message}`;
         });
     },
-
+    goBack() {
+      this.selectedEntity = null;
+      this.questions = [];
+    },
+    resetConnection() {
+      this.isConnected = false;
+      this.selectedEntity = null;
+      this.questions = [];
+      this.connectionDetails = {
+        host: "localhost",
+        user: "",
+        password: "",
+        database: "",
+      };
+      this.connectionMessage = "";
+    },
   },
 };
 </script>
@@ -138,11 +172,34 @@ button {
 button:hover {
   background-color: #005cbf;
 }
+.change-connection {
+  background-color: #e74c3c;
+  margin-top: 10px;
+}
+.change-connection:hover {
+  background-color: #c0392b;
+}
 .output {
   margin-top: 10px;
   background: #f9f9f9;
   border: 1px solid #ccc;
   padding: 10px;
   white-space: pre-wrap;
+}
+.cards {
+  display: flex;
+  gap: 10px;
+}
+.card {
+  flex: 1;
+  border: 1px solid #ccc;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+.card:hover {
+  background-color: #f0f0f0;
 }
 </style>
